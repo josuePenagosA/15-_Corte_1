@@ -1,11 +1,6 @@
 """
-App básica de Streamlit — Nivel de ríos/quebradas (CORNARE / MARCO)
---------------------------------------------------------------------
-Cada estudiante debe cambiar, como mínimo, el código de la estación
-en el sidebar. Los valores de fecha y calidad también son ajustables.
-
-Para correrla:
-    streamlit run app_nivel_cornare.py
+App de Streamlit — Nivel de ríos/quebradas (CORNARE / MARCO)
+Estación Fijada: Código 20 - Río Venus (Puerto Venus, Nariño)
 """
 
 import requests
@@ -17,11 +12,18 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ------------------------------------------------------------------
-# Coordenadas por defecto (Institución Universitaria Pascual Bravo)
-# Se usan solo si la API no trae la latitud/longitud de la estación.
+# Información de la Estación (Fijada según MARCO - CORNARE)
 # ------------------------------------------------------------------
-LAT_DEFECTO = 6.2766
-LON_DEFECTO = -75.5901
+CODIGO_ESTACION = "20"
+NOMBRE_ESTACION = "Estación Hidrometeorológica - Río Venus"
+MUNICIPIO = "Nariño"
+CORREGIMIENTO = "Puerto Venus"
+CORRIENTE = "Río Venus"
+PARAMETROS_ESTACION = "Nivel, Precipitación"
+
+# Coordenadas de Puerto Venus, Nariño (Antioquia)
+LAT_ESTACION = 5.6262
+LON_ESTACION = -75.1633
 
 API_BASE_URL = "https://marco.cornare.gov.co/api/v1/estaciones"
 
@@ -30,8 +32,11 @@ LLAVE_VALOR = "level"
 CANDIDATOS_LAT = ["lat", "latitude", "latitud"]
 CANDIDATOS_LON = ["lng", "lon", "longitude", "longitud"]
 
-st.set_page_config(page_title="Nivel de estación — CORNARE", page_icon="🌊", layout="wide")
-
+st.set_page_config(
+    page_title=f"Estación {CODIGO_ESTACION} - Río Venus", 
+    page_icon="🌊", 
+    layout="wide"
+)
 
 # ------------------------------------------------------------------
 # Funciones de consulta
@@ -69,9 +74,9 @@ def obtener_todas_las_paginas(datos_json, timeout=30):
 
 
 def detectar_coordenadas(datos_json):
-    """Busca lat/lon en las llaves raíz de la respuesta. Si no las encuentra, usa el valor por defecto."""
+    """Busca lat/lon en las llaves raíz de la respuesta. Si no las encuentra, usa las del corregimiento Puerto Venus."""
     if not isinstance(datos_json, dict):
-        return LAT_DEFECTO, LON_DEFECTO, False
+        return LAT_ESTACION, LON_ESTACION, False
 
     lat = next((datos_json[k] for k in CANDIDATOS_LAT if k in datos_json), None)
     lon = next((datos_json[k] for k in CANDIDATOS_LON if k in datos_json), None)
@@ -81,7 +86,7 @@ def detectar_coordenadas(datos_json):
             return float(lat), float(lon), True
         except (TypeError, ValueError):
             pass
-    return LAT_DEFECTO, LON_DEFECTO, False
+    return LAT_ESTACION, LON_ESTACION, False
 
 
 def calcular_indice_calidad(df):
@@ -111,33 +116,58 @@ def calcular_indice_calidad(df):
 
 
 # ------------------------------------------------------------------
-# Sidebar — parámetros de la consulta (editables por cada estudiante)
+# Sidebar — Parámetros
 # ------------------------------------------------------------------
-st.sidebar.header("Parámetros de tu consulta")
+st.sidebar.header("⚙️ Configuración del Análisis")
 nombre_estudiante = st.sidebar.text_input("Nombre del estudiante", "Tu Nombre Aquí")
-codigo_estacion = st.sidebar.text_input("Código de estación", "42")
+
+# Mostrar estación fijada en el Sidebar
+st.sidebar.markdown("---")
+st.sidebar.subheader("📍 Estación Consultada")
+st.sidebar.info(
+    f"**Código:** {CODIGO_ESTACION}\n\n"
+    f"**Nombre:** {NOMBRE_ESTACION}\n\n"
+    f"**Municipio:** {MUNICIPIO}\n\n"
+    f"**Corregimiento:** {CORREGIMIENTO}\n\n"
+    f"**Corriente:** {CORRIENTE}"
+)
+
+st.sidebar.markdown("---")
 fecha_desde = st.sidebar.date_input("Desde", pd.to_datetime("2026-08-23")).strftime("%Y-%m-%d")
 fecha_hasta = st.sidebar.date_input("Hasta", pd.to_datetime("2026-08-30")).strftime("%Y-%m-%d")
 calidad = st.sidebar.selectbox("Calidad", [1, 0], index=0, help="1 = solo datos validados")
-consultar = st.sidebar.button("🔍 Consultar", type="primary")
+consultar = st.sidebar.button("🔍 Consultar Estación 20", type="primary")
 
-st.title("🌊 Nivel de ríos y quebradas — CORNARE")
-st.caption(f"Estudiante: **{nombre_estudiante}** · Estación: **{codigo_estacion}**")
+# ------------------------------------------------------------------
+# Encabezado Principal
+# ------------------------------------------------------------------
+st.title(f"🌊 Monitoreo del {CORRIENTE} — Estación Código {CODIGO_ESTACION}")
+st.caption(f"Estudiante: **{nombre_estudiante}** · Sistema MARCO - CORNARE")
+
+# Ficha informativa de la estación
+with st.container():
+    col_info1, col_info2, col_info3, col_info4 = st.columns(4)
+    col_info1.markdown(f"**Municipio:** {MUNICIPIO}")
+    col_info2.markdown(f"**Corregimiento:** {CORREGIMIENTO}")
+    col_info3.markdown(f"**Parámetros:** {PARAMETROS_ESTACION}")
+    col_info4.markdown("**Estado:** 🟢 `SEGURO`")
+
+st.markdown("---")
 
 # ------------------------------------------------------------------
 # Consulta y procesamiento
 # ------------------------------------------------------------------
 if consultar:
-    with st.spinner("Consultando la API..."):
-        datos_crudos, error = obtener_serie_nivel(codigo_estacion, fecha_desde, fecha_hasta, calidad)
+    with st.spinner(f"Consultando la API para la Estación {CODIGO_ESTACION} ({CORRIENTE})..."):
+        datos_crudos, error = obtener_serie_nivel(CODIGO_ESTACION, fecha_desde, fecha_hasta, calidad)
 
     if error:
-        st.error(f"❌ {error}")
+        st.error(f"❌ Error al consultar la estación {CODIGO_ESTACION}: {error}")
     else:
         registros = obtener_todas_las_paginas(datos_crudos)
 
         if not registros:
-            st.warning("No hay registros para esta estación y rango de fechas. Prueba otro código u otro rango.")
+            st.warning(f"No hay registros de nivel para la Estación {CODIGO_ESTACION} ({CORRIENTE}) en el rango de fechas seleccionado.")
         else:
             df = pd.DataFrame(registros)
             df = df.rename(columns={LLAVE_FECHA: "fecha", LLAVE_VALOR: "nivel"})
@@ -148,34 +178,40 @@ if consultar:
             lat, lon, coords_reales = detectar_coordenadas(datos_crudos)
             indice_calidad, huecos, n_outliers = calcular_indice_calidad(df)
 
-            # --- Métricas principales ---
+            # --- Métricas principales de la estación ---
+            st.subheader(f"📊 Resumen de Lecturas en {CORRIENTE}")
             col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Lecturas", len(df))
-            col2.metric("Nivel promedio", f"{df['nivel'].mean():.2f}")
-            col3.metric("Índice de calidad", f"{indice_calidad} / 100")
-            col4.metric("Outliers detectados", n_outliers)
+            col1.metric("Lecturas Registradas", len(df))
+            col2.metric("Nivel Promedio", f"{df['nivel'].mean():.2f} m")
+            col3.metric("Índice de Calidad", f"{indice_calidad} / 100")
+            col4.metric("Outliers Detectados", n_outliers)
 
             # --- Gráfico de la serie ---
-            st.subheader("Serie de nivel")
+            st.subheader(f"📈 Serie Temporal del Nivel - {CORRIENTE} (Puerto Venus)")
             st.line_chart(df.set_index("fecha")["nivel"])
 
             # --- Mapa de la estación ---
-            st.subheader("Ubicación de la estación")
+            st.subheader(f"📍 Ubicación de la Estación Código {CODIGO_ESTACION} (Puerto Venus, {MUNICIPIO})")
             if not coords_reales:
-                st.caption("La API no trajo latitud/longitud de la estación — se muestra el punto de partida (Pascual Bravo). Ajusta `CANDIDATOS_LAT` / `CANDIDATOS_LON` si conoces el nombre real de esas llaves.")
-            st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=10)
+                st.caption("Ubicación geográfica aproximada del Corregimiento Puerto Venus, Nariño (Antioquia).")
+            st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}), zoom=12)
 
             # --- Detalle de calidad ---
-            with st.expander("Detalle del índice de calidad"):
-                st.write(f"- Huecos de reporte detectados: **{huecos}**")
-                st.write(f"- Outliers (IQR + nivel negativo): **{n_outliers}** de {len(df)} lecturas")
-                st.write("El índice combina completitud de la serie (70%) y proporción de datos sin outliers (30%).")
+            with st.expander("ℹ️ Detalle de la calidad de datos de la Estación 20"):
+                st.write(f"- Huecos de reporte detectados en {CORRIENTE}: **{huecos}**")
+                st.write(f"- Outliers (método IQR / valores negativos): **{n_outliers}** de {len(df)} lecturas")
+                st.write("El índice combina la completitud de la serie (70%) y la proporción de datos válidos (30%).")
 
             # --- Tabla y descarga ---
-            with st.expander("Ver datos crudos"):
+            with st.expander("📋 Ver datos crudos de la estación"):
                 st.dataframe(df, use_container_width=True)
 
             csv = df.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Descargar CSV", csv, file_name=f"nivel_estacion_{codigo_estacion}.csv", mime="text/csv")
+            st.download_button(
+                "⬇️ Descargar CSV - Estación 20 Río Venus", 
+                csv, 
+                file_name=f"estacion_20_rio_venus_{fecha_desde}_a_{fecha_hasta}.csv", 
+                mime="text/csv"
+            )
 else:
-    st.info("Ajusta los parámetros en el sidebar y presiona **Consultar**.")
+    st.info(f"Selecciona el rango
